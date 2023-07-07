@@ -1,0 +1,51 @@
+options:
+  mayLoad: false
+  mayStore: false
+  hasSideEffects: false
+types:
+  i32constant:
+    cType: i32
+    fType: Li
+    ice: true
+  i32:
+    cType: i32
+    fType: Li
+operands:
+  rd:
+    output: true
+    type: GPR
+  rs1:
+    input: true
+    type: GPR
+  rs2:
+    input: true
+    type: GPR
+extensions:
+  - name: MAC
+    identifier: s4emac
+    fileName: S4E_MAC
+    instructions:
+      RESET_ACC:
+        operands:
+      GET_ACC_LO:
+        operands:
+          rd:
+      GET_ACC_HI:
+        operands:
+          rd:
+      MACU_32:
+        operands:
+          rs1:
+          rs2:
+      MACS_32:
+        operands:
+          rs1:
+          rs2:
+      MACU_64:
+        operands:
+          rs1:
+          rs2:
+      MACS_64:
+        operands:
+          rs1:
+          rs2:

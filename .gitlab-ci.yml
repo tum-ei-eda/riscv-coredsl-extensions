@@ -1,0 +1,36 @@
+image: ubuntu:20.04
+
+stages:          # List of stages for jobs, and their order of execution  
+  - build
+  - deploy
+
+before_script: #
+  - apt update &&  DEBIAN_FRONTEND=noninteractive apt install -y git && \
+      apt clean && rm -rf /var/lib/apt/lists/*
+
+build_artifacts: 
+  stage: build
+  script:
+    - rm -rf Extensions_Files
+    - mkdir -p Extension_Files
+    - cp *.core_desc *.yaml Extension_Files # Instead copy the modified files (both coreDSL and YAML)
+  artifacts:
+    paths:
+    - Extension_Files/*
+    expire_in: 1 Week
+      
+trigger_coredsl2tablegen:
+  stage: deploy
+  needs: [build_artifacts]
+  trigger:
+    project: scale4edge/coredsl2tablegen
+    branch: main
+    strategy: depend 
+        
+trigger_tgc-vp:
+  stage: deploy
+  needs: [build_artifacts]
+  trigger:
+    project: scale4edge/tgc-vp
+    branch: b_scale4edge 
+    strategy: depend

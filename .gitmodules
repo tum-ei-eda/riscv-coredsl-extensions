@@ -1,0 +1,3 @@
+[submodule "CoreDSL-Instruction-Set-Description"]
+	path = CoreDSL-Instruction-Set-Description
+	url = git@github.com:Minres/RISCV_ISA_CoreDSL.git
