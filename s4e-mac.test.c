@@ -1,6 +1,6 @@
 // Basic test of assembly and layout of sample S4E MAC instruction extensions
 
-// RUN: %clang --target=riscv32 -march=rv32ixs4emac -c -o %t.o %s
+// RUN: clang --target=riscv32 -march=rv32ixs4emac -c -o %t.o %s
 // RUN: llvm-objdump --disassembler-options=numeric -d %t.o | FileCheck %s
 
 int main() {

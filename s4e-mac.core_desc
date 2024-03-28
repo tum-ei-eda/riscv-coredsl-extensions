@@ -1,6 +1,6 @@
-import "CoreDSL-Instruction-Set-Description/RISCVBase.core_desc"
+import "CoreDSL-Instruction-Set-Description/RV32I.core_desc"
 
-InstructionSet X_S4E_MAC extends RISCVBase {
+InstructionSet X_S4E_MAC extends RV32I {
   architectural_state {
     register unsigned<64> ACC;
   }
@@ -11,19 +11,19 @@ InstructionSet X_S4E_MAC extends RISCVBase {
       assembly:"";
       behavior: ACC = 0;
     }
-    
+
     GET_ACC_LO {
       encoding: 7'd1 :: 10'b0 :: 3'd0 :: rd[4:0] :: 7'b0001011;
       assembly:"{name(rd)}";
       behavior: if (rd != 0) X[rd] = ACC[31:0];
     }
-    
+
     GET_ACC_HI {
       encoding: 7'd2 :: 10'b0 :: 3'd0 :: rd[4:0] :: 7'b0001011;
       assembly:"{name(rd)}";
       behavior: if (rd != 0) X[rd] = ACC[63:32];
     }
-    
+
     MACU_32 {
       encoding: 7'd0 :: rs2[4:0] :: rs1[4:0] :: 3'd1 :: 5'b0 :: 7'b0001011;
       assembly:"{name(rs1)}, {name(rs2)}";
@@ -33,7 +33,7 @@ InstructionSet X_S4E_MAC extends RISCVBase {
         ACC = add[31:0];
       }
     }
-    
+
     MACS_32 {
       encoding: 7'd1 :: rs2[4:0] :: rs1[4:0] :: 3'd1 :: 5'b0 :: 7'b0001011;
       assembly:"{name(rs1)}, {name(rs2)}";
@@ -43,7 +43,7 @@ InstructionSet X_S4E_MAC extends RISCVBase {
         ACC = add[31:0]; // bit range always yields unsigned type
       }
     }
-    
+
     MACU_64 {
       encoding: 7'd0 :: rs2[4:0] :: rs1[4:0] :: 3'd2 :: 5'b0 :: 7'b0001011;
       assembly:"{name(rs1)}, {name(rs2)}";
@@ -53,7 +53,7 @@ InstructionSet X_S4E_MAC extends RISCVBase {
         ACC = add[63:0];
       }
     }
-    
+
     MACS_64 {
       encoding: 7'd1 :: rs2[4:0] :: rs1[4:0] :: 3'd2 :: 5'b0 :: 7'b0001011;
       assembly:"{name(rs1)}, {name(rs2)}";
