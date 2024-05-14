@@ -1,4 +1,4 @@
-import "CoreDSL-Instruction-Set-Description/RV32I.core_desc"
+import "../rv_base/RV32I.core_desc"
 
 InstructionSet X_S4E_MAC extends RV32I {
   architectural_state {
