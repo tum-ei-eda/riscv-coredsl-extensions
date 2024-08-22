@@ -1,0 +1,57 @@
+import "CoreDSL-Instruction-Set-Description/RVA.core_desc"
+
+InstructionSet tum_rva extends RV32A {
+    architectural_state {
+        register unsigned<XLEN> RES_ADDR = -1;
+    }
+
+    instructions {
+        LRW {
+            encoding: 5'b00010 :: aq[0:0] :: rl[0:0]  :: 5'b00000 :: rs1[4:0] :: 3'b010 :: rd[4:0] :: 7'b0101111;
+            assembly: "{name(rd)}, {name(rs1)}, {name(aq)}, {name(rl)}";
+            behavior: {
+                unsigned<XLEN> offs = X[rs1 % RFS];
+                signed<32> res = (signed<32>)MEM[offs];
+                RES_ADDR = offs;
+                if (rd) X[rd % RFS] = (signed<XLEN>)res;
+            }
+        }
+
+        SCW {
+            encoding: 5'b00011 :: aq[0:0] :: rl[0:0] :: rs2[4:0] :: rs1[4:0] :: 3'b010 :: rd[4:0] :: 7'b0101111;
+            assembly: "{name(rd)}, {name(rs1)}, {name(rs2)}, {name(aq)}, {name(rl)}";
+            behavior: {
+                unsigned<XLEN> offs = X[rs1 % RFS];
+                if (RES_ADDR == offs) MEM[offs] = (signed<32>)X[rs2 % RFS];
+                if (rd) X[rd % RFS] = RES_ADDR != offs;
+                RES_ADDR = -1;
+            }
+        }
+    }
+}
+
+InstructionSet tum_rva64 extends tum_rva {
+    instructions {
+        LRD {
+            encoding: 5'b00010 :: aq[0:0] :: rl[0:0]  :: 5'b00000 :: rs1[4:0] :: 3'b011 :: rd[4:0] :: 7'b0101111;
+            assembly: "{name(rd)}, {name(rs1)}, {name(aq)}, {name(rl)}";
+            behavior: {
+                unsigned<XLEN> offs = X[rs1 % RFS];
+                signed<64> res = (signed<64>)MEM[offs];
+                RES_ADDR = offs;
+                if (rd) X[rd % RFS] = (signed<XLEN>)res;
+            }
+        }
+
+        SCD {
+            encoding: 5'b00011 :: aq[0:0] :: rl[0:0] :: rs2[4:0] :: rs1[4:0] :: 3'b011 :: rd[4:0] :: 7'b0101111;
+            assembly: "{name(rd)}, {name(rs1)}, {name(rs2)}, {name(aq)}, {name(rl)}";
+            behavior: {
+                unsigned<XLEN> offs = X[rs1 % RFS];
+                if (RES_ADDR == offs) MEM[offs] = (signed<64>)X[rs2 % RFS];
+                if (rd) X[rd % RFS] = RES_ADDR != offs;
+                RES_ADDR = -1;
+            }
+        }
+    }
+}

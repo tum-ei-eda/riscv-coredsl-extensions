@@ -1,0 +1,456 @@
+import "CoreDSL-Instruction-Set-Description/RISCVBase.core_desc"
+import "CoreDSL-Instruction-Set-Description/RV32I.core_desc"
+import "RISCVEncoding.core_desc"
+
+InstructionSet tum_ret extends RISCVBase, RISCVEncoding {
+    architectural_state {
+        signed<32> ETISS_RETURNCODE_NOERROR = 0;
+        signed<32> ETISS_RETURNCODE_GENERALERROR = -1;
+        signed<32> ETISS_RETURNCODE_RELOADBLOCKS = -2;
+        signed<32> ETISS_RETURNCODE_RELOADCURRENTBLOCK = -3;
+        signed<32> ETISS_RETURNCODE_DBUS_READ_ERROR = -5;
+        signed<32> ETISS_RETURNCODE_DBUS_WRITE_ERROR = -6;
+        signed<32> ETISS_RETURNCODE_IBUS_READ_ERROR = -7;
+        signed<32> ETISS_RETURNCODE_IBUS_WRITE_ERROR = -8;
+        signed<32> ETISS_RETURNCODE_INTERRUPT = -9;
+        signed<32> ETISS_RETURNCODE_RESET = -10;
+        signed<32> ETISS_RETURNCODE_ILLEGALINSTRUCTION = -11;
+        signed<32> ETISS_RETURNCODE_ILLEGALJUMP = -12;
+        signed<32> ETISS_RETURNCODE_INSTR_PAGEFAULT = -13;
+        signed<32> ETISS_RETURNCODE_LOAD_PAGEFAULT = -14;
+        signed<32> ETISS_RETURNCODE_STORE_PAGEFAULT = -15;
+        signed<32> ETISS_RETURNCODE_GDBNOERROR = -16;
+        signed<32> ETISS_RETURNCODE_SYSCALL = -17;
+        signed<32> ETISS_RETURNCODE_PAGEFAULT = -18;
+        signed<32> ETISS_RETURNCODE_BREAKPOINT = -19;
+        signed<32> ETISS_RETURNCODE_CPUFINISHED = 1 << 31;
+        signed<32> ETISS_RETURNCODE_CPUTERMINATED = 0x80000001;
+        signed<32> ETISS_RETURNCODE_JITERROR = -32;
+        signed<32> ETISS_RETURNCODE_JITCOMPILATIONERROR = -33;
+        signed<32> ETISS_RETURNCODE_ARCHERROR = -34;
+        signed<32> ETISS_RETURNCODE_EMULATIONNOTSUPPORTED = -35;
+        signed<32> ETISS_RETURNCODE_INVALIDSYSTEM = -36;
+        signed<32> ETISS_RETURNCODE_TEMPORARY0 = -128;
+        signed<32> ETISS_RETURNCODE_TEMPORARY1 = -129;
+        signed<32> ETISS_RETURNCODE_TEMPORARY2 = -130;
+        signed<32> ETISS_RETURNCODE_TEMPORARY3 = -131;
+        signed<32> ETISS_RETURNCODE_TEMPORARY4 = -132;
+        signed<32> ETISS_RETURNCODE_TEMPORARY5 = -133;
+        signed<32> ETISS_RETURNCODE_TEMPORARY6 = -134;
+        signed<32> ETISS_RETURNCODE_TEMPORARY7 = -135;
+    }
+
+    functions {
+        unsigned<64> get_field(unsigned<64> reg, unsigned<64> mask) {
+            if (!mask) return 0;
+            return (reg & mask) / (mask & ~(mask << 1));
+        }
+
+        unsigned<64> set_field(unsigned<64> reg, unsigned<64> mask, unsigned<64> val) {
+            return ((reg & ~mask) | ((val * (mask & ~(mask << 1))) & mask));
+        }
+
+        unsigned<8> ctz(unsigned<64> val) {
+            if (!val)
+                return 0;
+
+            unsigned<8> res = 0;
+
+            if ((val << 32) == 0) {
+                res += 32;
+                val >>= 32;
+            }
+
+            if ((val << 48) == 0) {
+                res += 16;
+                val >>= 16;
+            }
+
+            if ((val << 56) == 0) {
+                res += 8;
+                val >>= 8;
+            }
+
+            if ((val << 60) == 0) {
+                res += 4;
+                val >>= 4;
+            }
+
+            if ((val << 62) == 0) {
+                res += 2;
+                val >>= 2;
+            }
+
+            if ((val << 63) == 0) {
+                res += 1;
+                val >>= 1;
+            }
+
+            return res;
+        }
+
+        void raise(int irq, unsigned<XLEN> mcause) [[ etiss_trap_entry_fn ]] {
+            unsigned<XLEN> epc = PC;
+
+            unsigned<XLEN> deleg, vector, bit = mcause;
+
+            int irq2 = (mcause & ((unsigned<XLEN>)1 << (XLEN - 1))) != 0;
+
+            if (irq2) {
+                deleg = (PRIV <= RV_PRV_S) ? CSR[RV_CSR_MIDELEG] : 0;
+                bit &= ((unsigned<XLEN>)1 << (XLEN - 1)) - 1;
+            } else {
+                deleg = (PRIV <= RV_PRV_S) ? CSR[RV_CSR_MEDELEG] : 0;
+            }
+
+            if (PRIV <= RV_PRV_S && (deleg >> bit) & 1) { // handle in S-MODE
+                vector = (CSR[RV_CSR_STVEC] & 1) && irq2 ? bit * 4 : 0;
+                PC = (CSR[RV_CSR_STVEC] & ~(unsigned<XLEN>)1) + vector;
+                CSR[RV_CSR_SEPC] = epc;
+                CSR[RV_CSR_SCAUSE] = mcause;
+
+                unsigned<XLEN> s = csr_read(RV_CSR_SSTATUS);
+                s = set_field(s, RV_MSTATUS_SPIE, get_field(s, RV_MSTATUS_SIE));
+                s = set_field(s, RV_MSTATUS_SPP, PRIV);
+                s = set_field(s, RV_MSTATUS_SIE, 0);
+                csr_write(RV_CSR_SSTATUS, s);
+                PRIV = RV_PRV_S;
+
+            } else {    // handle in M-MODE
+                vector = (CSR[RV_CSR_MTVEC] & 1) && irq2 ? bit * 4 : 0;
+                PC = (CSR[RV_CSR_MTVEC] & ~(unsigned<XLEN>)1) + vector;
+                CSR[RV_CSR_MEPC] = epc;
+                CSR[RV_CSR_MCAUSE] = mcause;
+
+                unsigned<XLEN> s = csr_read(RV_CSR_MSTATUS);
+                s = set_field(s, RV_MSTATUS_MPIE, get_field(s, RV_MSTATUS_MIE));
+                s = set_field(s, RV_MSTATUS_MPP, PRIV);
+                s = set_field(s, RV_MSTATUS_MIE, 0);
+                csr_write(RV_CSR_MSTATUS, s);
+                PRIV = RV_PRV_M;
+            }
+        }
+
+        void translate_exc_code(int cause) [[ etiss_trap_translate_fn=MEM ]] {
+            unsigned<XLEN> code = 0;
+
+            if (cause == ETISS_RETURNCODE_CPUFINISHED) return;
+            else if (cause == ETISS_RETURNCODE_DBUS_READ_ERROR) code = RV_CAUSE_LOAD_ACCESS;
+            else if (cause == ETISS_RETURNCODE_LOAD_PAGEFAULT) code = RV_CAUSE_LOAD_PAGE_FAULT;
+            else if (cause == ETISS_RETURNCODE_DBUS_WRITE_ERROR) code = RV_CAUSE_STORE_ACCESS;
+            else if (cause == ETISS_RETURNCODE_STORE_PAGEFAULT) code = RV_CAUSE_STORE_PAGE_FAULT;
+            else if (cause == ETISS_RETURNCODE_IBUS_READ_ERROR) code = RV_CAUSE_FETCH_ACCESS;
+            else if (cause == ETISS_RETURNCODE_INTERRUPT) {
+                code = calc_irq_mcause();
+                if (!code) return;
+            }
+            else code = RV_CAUSE_ILLEGAL_INSTRUCTION;
+
+            raise(0, code);
+        }
+
+        unsigned<XLEN> calc_irq_mcause() {
+            unsigned<XLEN> pending_interrupts = CSR[RV_CSR_MIE] & CSR[RV_CSR_MIP];
+
+            if (!pending_interrupts) return 0;
+
+            unsigned<XLEN> mie = get_field(CSR[RV_CSR_MSTATUS], RV_MSTATUS_MIE);
+            unsigned<XLEN> m_enabled = PRIV < RV_PRV_M || (PRIV == RV_PRV_M && mie);
+            unsigned<XLEN> enabled_interrupts = pending_interrupts & ~CSR[RV_CSR_MIDELEG] & -m_enabled;
+
+            if (enabled_interrupts == 0) {
+                unsigned<XLEN> deleg = CSR[RV_CSR_MIDELEG];
+                unsigned<XLEN> sie = get_field(csr_read(RV_CSR_SSTATUS), RV_MSTATUS_SIE);
+                unsigned<XLEN> s_enabled = PRIV < RV_PRV_S || (PRIV == RV_PRV_S && sie);
+                enabled_interrupts = pending_interrupts & deleg & -s_enabled;
+            }
+
+            if (enabled_interrupts) {
+                // nonstandard interrupts have highest priority
+                if (enabled_interrupts >> (RV_IRQ_M_EXT + 1))
+                    enabled_interrupts = enabled_interrupts >> (RV_IRQ_M_EXT + 1) << (RV_IRQ_M_EXT + 1);
+
+                // standard interrupt priority is MEI, MSI, MTI, SEI, SSI, STI
+                else if (enabled_interrupts & RV_MIP_MEIP)
+                    enabled_interrupts = RV_MIP_MEIP;
+                else if (enabled_interrupts & RV_MIP_MSIP)
+                    enabled_interrupts = RV_MIP_MSIP;
+                else if (enabled_interrupts & RV_MIP_MTIP)
+                    enabled_interrupts = RV_MIP_MTIP;
+                else if (enabled_interrupts & RV_MIP_SEIP)
+                    enabled_interrupts = RV_MIP_SEIP;
+                else if (enabled_interrupts & RV_MIP_SSIP)
+                    enabled_interrupts = RV_MIP_SSIP;
+                else if (enabled_interrupts & RV_MIP_STIP)
+                    enabled_interrupts = RV_MIP_STIP;
+                else if (enabled_interrupts & RV_MIP_LCOFIP)
+                    enabled_interrupts = RV_MIP_LCOFIP;
+                else if (enabled_interrupts & RV_MIP_VSEIP)
+                   enabled_interrupts = RV_MIP_VSEIP;
+                else if (enabled_interrupts & RV_MIP_VSSIP)
+                    enabled_interrupts = RV_MIP_VSSIP;
+                else if (enabled_interrupts & RV_MIP_VSTIP)
+                    enabled_interrupts = RV_MIP_VSTIP;
+                else
+                    return 0;
+
+                return ((unsigned<XLEN>)1 << (XLEN - 1)) | ctz(enabled_interrupts);
+            }
+
+            return 0;
+        }
+
+        void check_irq() {
+            unsigned<XLEN> irq_mcause = calc_irq_mcause();
+            if (irq_mcause)
+                raise(1, irq_mcause);
+        }
+        bool extension_enabled(char extension) {
+            return (CSR[RV_CSR_MISA] >> (extension - 'A')) & 1;
+        }
+    }
+
+    instructions {
+        MRET [[no_cont]] {
+            encoding: 7'b0011000 :: 5'b00010 :: 5'b00000 :: 3'b000 :: 5'b00000 :: 7'b1110011;
+            behavior: {
+                if (PRIV < RV_PRV_M)
+                    raise(0, RV_CAUSE_ILLEGAL_INSTRUCTION);
+
+                PC = CSR[RV_CSR_MEPC];
+
+                unsigned<XLEN> s = csr_read(RV_CSR_MSTATUS);
+
+                unsigned<XLEN> prev_prv = get_field(s, RV_MSTATUS_MPP);
+
+                if (prev_prv != RV_PRV_M)
+                    s = set_field(s, RV_MSTATUS_MPRV, 0);
+
+                s = set_field(s, RV_MSTATUS_MIE, get_field(s, RV_MSTATUS_MPIE));
+                s = set_field(s, RV_MSTATUS_MPIE, 1);
+                s = set_field(s, RV_MSTATUS_MPP, extension_enabled('U') ? RV_PRV_U : RV_PRV_M);
+
+                csr_write(RV_CSR_MSTATUS, s);
+                PRIV = prev_prv;
+            }
+        }
+
+        SRET [[no_cont]] {
+            encoding: 7'b0001000 :: 5'b00010 :: 5'b00000 :: 3'b000 :: 5'b00000 :: 7'b1110011;
+            behavior: {
+                if (PRIV < (get_field(csr_read(RV_CSR_MSTATUS), RV_MSTATUS_TSR) ? RV_PRV_M : RV_PRV_S))
+                    raise(0, RV_CAUSE_ILLEGAL_INSTRUCTION);
+
+                PC = CSR[RV_CSR_SEPC];
+
+                unsigned<XLEN> s = csr_read(RV_CSR_SSTATUS);
+
+                unsigned<XLEN> prev_prv = get_field(s, RV_MSTATUS_SPP);
+
+                s = set_field(s, RV_MSTATUS_SIE, get_field(s, RV_MSTATUS_SPIE));
+                s = set_field(s, RV_MSTATUS_SPIE, 1);
+                s = set_field(s, RV_MSTATUS_SPP, RV_PRV_U);
+
+                csr_write(RV_CSR_MSTATUS, s);
+                PRIV = prev_prv;
+            }
+        }
+
+        ECALL [[no_cont]] {
+            encoding: 0b000000000000 :: 5'b00000 :: 3'b000 :: 5'b00000 :: 7'b1110011;
+            behavior: {
+                raise(0, RV_CAUSE_USER_ECALL + PRIV);
+            }
+        }
+
+        WFI [[ no_cont ]] {
+            encoding: 7'b0001000 :: 5'b00101 :: 5'b00000 :: 3'b000 :: 5'b00000 :: 7'b1110011;
+            behavior: {
+
+            }
+        }
+    }
+
+    always {
+        pc_inc {
+            PC = PC + __encoding_size;
+        }
+
+        /*
+         * currently unused, irqs are checked with etiss plugin
+
+        irq_check [[ etiss_always_at_block_only ]] {
+            check_irq();
+        }
+        */
+    }
+}
+
+InstructionSet tum_csr extends Zicsr, RISCVEncoding {
+    architectural_state {
+        unsigned<XLEN>& MSTATUS [[ etiss_is_global_irq_en=0xf ]] = CSR[RV_CSR_MSTATUS];
+        unsigned<XLEN>& MIE [[ etiss_is_irq_en ]] = CSR[RV_CSR_MIE];
+        unsigned<XLEN>& MIP [[ etiss_is_irq_pending ]] = CSR[RV_CSR_MIP];
+    }
+
+    functions {
+        extern unsigned<64> etiss_get_cycles() [[ etiss_needs_arch ]];
+        extern unsigned<64> etiss_get_time();
+        extern unsigned<64> etiss_get_instret() [[ etiss_needs_arch ]];
+
+        unsigned<XLEN> sstatus_mask() {
+            unsigned<XLEN> mask = 0;
+
+            if (extension_enabled('S')) {
+                mask |= 0 | (RV_MSTATUS_SIE | RV_MSTATUS_SPIE | RV_MSTATUS_SPP | RV_MSTATUS_MXR | RV_MSTATUS_TVM | RV_MSTATUS_TSR);
+
+                if (extension_enabled('V'))
+                    mask |= RV_MSTATUS_VS;
+
+                if (extension_enabled('F'))
+                    mask |= RV_MSTATUS_FS;
+
+                if (extension_enabled('X'))
+                    mask |= RV_MSTATUS_XS;
+
+                if ((XLEN == 32 && get_field(CSR[RV_CSR_SATP], 1 << 31)) || (XLEN == 64 && get_field(CSR[RV_CSR_SATP], 15 << 60)))
+                    mask |= RV_MSTATUS_SUM;
+            }
+
+            return mask;
+        }
+
+        unsigned<XLEN> mstatus_mask() {
+            unsigned<XLEN> mask = 0 | (RV_MSTATUS_MIE | RV_MSTATUS_MPIE | RV_MSTATUS_MPP);
+
+            return mask | sstatus_mask();
+        }
+
+        unsigned<XLEN> csr_read(unsigned int csr) {
+            if (csr == RV_CSR_FFLAGS) return CSR[RV_CSR_FCSR] & 0x1F;
+            if (csr == RV_CSR_FRM) return (CSR[RV_CSR_FCSR] >> 5) & 0x07;
+            if (csr == RV_CSR_CYCLE) return etiss_get_cycles();
+            if (csr == RV_CSR_CYCLEH) return etiss_get_cycles() >> 32;
+            if (csr == RV_CSR_TIME) return etiss_get_time();
+            if (csr == RV_CSR_TIMEH) return etiss_get_time() >> 32;
+            if (csr == RV_CSR_INSTRET) return etiss_get_instret();
+            if (csr == RV_CSR_INSTRETH) return etiss_get_instret() >> 32;
+            if (csr == RV_CSR_MSTATUS || csr == RV_CSR_SSTATUS) return CSR[RV_CSR_MSTATUS] | (RV_MSTATUS_UXL & (RV_MSTATUS_UXL << 1)) | (RV_MSTATUS_SXL & (RV_MSTATUS_SXL << 1));
+            if (csr == RV_CSR_MISA) return (unsigned<2>)(XLEN / 32) :: CSR[RV_CSR_MISA][XLEN - 3:0];
+
+            return CSR[csr];
+        }
+
+        void csr_write(unsigned int csr, unsigned<XLEN> val) {
+            if (csr == RV_CSR_FFLAGS) CSR[RV_CSR_FCSR] = (CSR[RV_CSR_FCSR] & (0x07 << 5)) | (val & 0x1F);
+            else if (csr == RV_CSR_FRM) CSR[RV_CSR_FCSR] = ((val & 0x07) << 5) | (CSR[RV_CSR_FCSR] & 0x1F);
+            else if (csr == RV_CSR_FCSR) CSR[RV_CSR_FCSR] = val & 0xFF;
+            else if (csr == RV_CSR_MSTATUS) CSR[RV_CSR_MSTATUS] = val & mstatus_mask();
+            else if (csr == RV_CSR_SSTATUS) CSR[RV_CSR_MSTATUS] = val & sstatus_mask();
+
+            else if (csr != RV_CSR_MISA) CSR[csr] = val;
+        }
+    }
+
+    instructions {
+        CSRRW {
+            encoding: csr[11:0] :: rs1[4:0] :: 3'b001 :: rd[4:0] :: 7'b1110011;
+            assembly:"{name(rd)}, {csr}, {name(rs1)}";
+            behavior: {
+                unsigned<XLEN> xrs1 = X[rs1 % RFS];
+                if ((rd % RFS) != 0) {
+                    unsigned<XLEN> xrd = csr_read(csr);
+                    csr_write(csr, xrs1);
+                    // make sure Xrd is updated once CSR write succeeds
+                    X[rd % RFS] = xrd;
+                } else {
+                    csr_write(csr, xrs1);
+                }
+            }
+        }
+
+        CSRRS {
+            encoding: csr[11:0] :: rs1[4:0] :: 3'b010 :: rd[4:0] :: 7'b1110011;
+            assembly:"{name(rd)}, {csr}, {name(rs1)}";
+            behavior: {
+                unsigned<XLEN> xrd = csr_read(csr);
+                unsigned<XLEN> xrs1 = X[rs1 % RFS];
+                if (rs1 != 0) csr_write(csr, xrd | xrs1);
+                if ((rd % RFS) != 0) X[rd % RFS] = xrd;
+            }
+        }
+
+        CSRRC {
+            encoding: csr[11:0] :: rs1[4:0] :: 3'b011 :: rd[4:0] :: 7'b1110011;
+            assembly:"{name(rd)}, {csr}, {name(rs1)}";
+            behavior: {
+                unsigned<XLEN> xrd = csr_read(csr);
+                unsigned<XLEN> xrs1 = X[rs1 % RFS];
+                if (rs1 != 0) csr_write(csr, xrd & ~xrs1);
+                if ((rd % RFS) != 0) X[rd % RFS] = xrd;
+            }
+        }
+
+        CSRRWI {
+            encoding: csr[11:0] :: zimm[4:0] :: 3'b101 :: rd[4:0] :: 7'b1110011;
+            assembly:"{name(rd)}, {csr}, {zimm:#0x}";
+            behavior: {
+                unsigned<XLEN> xrd = csr_read(csr);
+                csr_write(csr, (unsigned<XLEN>)zimm);
+                if ((rd % RFS) != 0) X[rd % RFS] = xrd;
+            }
+        }
+
+        CSRRSI {
+            encoding: csr[11:0] :: zimm[4:0] :: 3'b110 :: rd[4:0] :: 7'b1110011;
+            assembly:"{name(rd)}, {csr}, {zimm:#0x}";
+            behavior: {
+                unsigned<XLEN> xrd = csr_read(csr);
+                if (zimm != 0) csr_write(csr, xrd | (unsigned<XLEN>)zimm);
+                if ((rd % RFS) != 0) X[rd % RFS] = xrd;
+            }
+        }
+
+        CSRRCI {
+            encoding: csr[11:0] :: zimm[4:0] :: 3'b111 :: rd[4:0] :: 7'b1110011;
+            assembly:"{name(rd)}, {csr}, {zimm:#0x}";
+            behavior: {
+                unsigned<XLEN> xrd = csr_read(csr);
+                if (zimm != 0) csr_write(csr, xrd & ~((unsigned<XLEN>)zimm));
+                if ((rd % RFS) != 0) X[rd % RFS] = xrd;
+            }
+        }
+    }
+}
+
+InstructionSet tum_semihosting extends RV32I {
+    instructions {
+        EBREAK [[no_cont]] [[cond]] {
+            encoding: 0b000000000001 :: 5'b00000 :: 3'b000 :: 5'b00000 :: 7'b1110011;
+            behavior: {
+                if (etiss_semihost_enabled()) {
+                    unsigned<32> pre    = (unsigned<32>)MEM[PC - 4];
+                    unsigned<32> ebreak = (unsigned<32>)MEM[PC + 0];
+                    unsigned<32> post   = (unsigned<32>)MEM[PC + 4];
+                    if ( pre    == 0x01f01013 // slli x0, x0, 0x1f   Entry NOP
+                      && ebreak == 0x00100073 // ebreak              Break to debugger
+                      && post   == 0x40705013 // srai x0, x0, 7      NOP encoding the semihosting call number 7
+                    ) {
+                    unsigned<XLEN> operation = X[10];
+                    unsigned<XLEN> parameter = X[11];
+                    X[10] = (signed<XLEN>)etiss_semihost(XLEN, operation, parameter);
+                    } else {
+                        raise(0, RV_CAUSE_BREAKPOINT);
+                    }
+                } else {
+                    raise(0, RV_CAUSE_BREAKPOINT);
+                }
+            }
+        }
+    }
+
+    functions {
+        extern unsigned<8> etiss_semihost_enabled();
+        extern signed<64> etiss_semihost(unsigned<32> XLEN, unsigned<64> operation, unsigned<64> parameter) [[etiss_needs_arch]];
+    }
+}
