@@ -1,0 +1,63 @@
+import "CoreDSL-Instruction-Set-Description/RVM.core_desc"
+
+InstructionSet tum_rvm extends RV32M {
+    functions {
+        signed<XLEN> mulh(signed<XLEN> x, signed<XLEN> y) {
+            signed<MUL_LEN> res = (signed<MUL_LEN>)x * (signed<MUL_LEN>)y;
+            return (signed<XLEN>)(res >> XLEN);
+        }
+
+        signed<XLEN> mulhsu(signed<XLEN> x, unsigned<XLEN>y) {
+            signed<MUL_LEN> res = (signed<MUL_LEN>)x * (unsigned<MUL_LEN>)y;
+            return (signed<XLEN>)(res >> XLEN);
+        }
+
+        unsigned<XLEN> mulhu(unsigned<XLEN> x, unsigned<XLEN>y) {
+            unsigned<MUL_LEN> res = (unsigned<MUL_LEN>)x * (unsigned<MUL_LEN>)y;
+            return (unsigned<XLEN>)(res >> XLEN);
+        }
+    }
+
+    instructions {
+        MUL {
+            encoding: 7'b0000001 :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0110011;
+            assembly:"{name(rd)}, {name(rs1)}, {name(rs2)}";
+            behavior: {
+                if ((rd % RFS) != 0) {
+                    signed<XLEN> res = (signed)X[rs1 % RFS] * (signed)X[rs2 % RFS];
+                    X[rd % RFS] = (unsigned<XLEN>)res;
+                }
+            }
+        }
+
+        MULH {
+            encoding: 7'b0000001 :: rs2[4:0] :: rs1[4:0] :: 3'b001 :: rd[4:0] :: 7'b0110011;
+            assembly:"{name(rd)}, {name(rs1)}, {name(rs2)}";
+            behavior: {
+                if ((rd % RFS) != 0) {
+                    X[rd % RFS] = mulh((signed)X[rs1 % RFS], (signed)X[rs2 % RFS]);
+                }
+            }
+        }
+
+        MULHSU {
+            encoding: 7'b0000001 :: rs2[4:0] :: rs1[4:0] :: 3'b010 :: rd[4:0] :: 7'b0110011;
+            assembly:"{name(rd)}, {name(rs1)}, {name(rs2)}";
+            behavior: {
+                if ((rd % RFS) != 0) {
+                    X[rd % RFS] = mulhsu((signed)X[rs1 % RFS], X[rs2 % RFS]);
+                }
+            }
+        }
+
+        MULHU {
+            encoding: 7'b0000001 :: rs2[4:0] :: rs1[4:0] :: 3'b011 :: rd[4:0] :: 7'b0110011;
+            assembly:"{name(rd)}, {name(rs1)}, {name(rs2)}";
+            behavior: {
+                if ((rd % RFS) != 0) {
+                    X[rd % RFS] = mulhu(X[rs1 % RFS], X[rs2 % RFS]);
+                }
+            }
+        }
+    }
+}
