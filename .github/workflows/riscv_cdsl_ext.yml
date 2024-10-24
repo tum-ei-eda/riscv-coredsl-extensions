@@ -3,16 +3,14 @@ name: Riscv CoreDSL Extension
 on:
   workflow_dispatch:
   push:
-    branches: [ "b_github_ci" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "b_github_ci" ]
+    branches: [ "main" ]
 
 jobs:
   trigger-seal5-etiss:
     runs-on: ubuntu-latest
-
     steps:
-   
     - name: Trigger Seal5 Workflow
       uses: peter-evans/repository-dispatch@v3
       with:
