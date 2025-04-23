@@ -26,3 +26,11 @@ jobs:
         repository: ${{ 'tum-ei-eda/etiss_riscv_test_env' }}
         event-type: s4e-cdsl-event
         client-payload: '{"triggered_by": "${{ github.repository }}", "run_id": "${{ github.run_id }}"}'
+
+    - name: Trigger Seal5 ETISS Test Env Workflow
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.SEAL5_ACCESS_TOKEN }}
+        repository: ${{ 'tum-ei-eda/seal5_etiss_test_env' }}
+        event-type: s4e-cdsl-event
+        client-payload: '{"triggered_by": "${{ github.repository }}", "run_id": "${{ github.run_id }}"}'
