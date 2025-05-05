@@ -13,7 +13,7 @@ InstructionSet X_S4E_MAC extends RISCVBase {
   }
 
   instructions {
-    RESET_ACC { // v-- funct7       v-- funct3
+    RESET_ACC { // v-- funct7        v-- funct3
       encoding: 7'd0 :: 10'b0 :: 3'd0 :: 5'b0 :: 7'b0001011;
       assembly:"";
       behavior: ACC = 0;
