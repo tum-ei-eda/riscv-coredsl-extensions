@@ -8,6 +8,9 @@ on:
     branches: [ "main" ]
 
 jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
     - name: Trigger Seal5 ETISS Test Env Workflow
       uses: peter-evans/repository-dispatch@v3
       with:
